@@ -20,6 +20,8 @@ package io.github.a10y;
 
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.Table;
@@ -52,9 +54,9 @@ public class StreamingJob {
 
         tEnv.sqlUpdate("INSERT INTO split_lines SELECT * FROM " + grouped);
 
-        env.getConfig().archive().getExecutionMode()
         env.setRestartStrategy(RestartStrategies.fixedDelayRestart(100, Time.seconds(1)));
         env.enableCheckpointing(100L);
+        env.setStateBackend((StateBackend) new FsStateBackend("file:///tmp/testing"));
         env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
         env.execute("Network exec.");
     }
