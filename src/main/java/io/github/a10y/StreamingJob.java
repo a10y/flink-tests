@@ -18,14 +18,15 @@
 
 package io.github.a10y;
 
-import org.apache.flink.api.common.restartstrategy.RestartStrategies;
-import org.apache.flink.api.common.time.Time;
+import java.util.Map;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.graph.StreamGraph;
+import org.apache.flink.streaming.api.graph.StreamGraphHasherV2;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.java.StreamTableEnvironment;
+import org.apache.flink.util.StringUtils;
 
 public class StreamingJob {
     public static void main(String[] args) throws Exception {
@@ -42,7 +43,8 @@ public class StreamingJob {
         tEnv.registerFunction("index", new IndexUdf());
 
         // Register table source from network.
-        tEnv.registerTableSource("network", new NetworkTableSource(2387));
+        // tEnv.registerTableSource("network", new NetworkTableSource(2387));
+        tEnv.registerTableSource("network", new NetworkTableSourceCloned(2387));
 
         // Do some cool logic.
         String query = "SELECT index(split(line, ','), 0) AS `left`, CAST(index(split(line, ','), 1) AS INT) AS `right`" +
@@ -58,9 +60,29 @@ public class StreamingJob {
 
         tEnv.sqlUpdate("INSERT INTO split_lines SELECT * FROM " + grouped);
 
-        env.setRestartStrategy(RestartStrategies.fixedDelayRestart(100, Time.seconds(1)));
-        env.enableCheckpointing(100L);
-        env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
-        env.execute("Network exec.");
+        // Try changing this shit, see the operator state graph, etc.
+        System.err.println(env.getExecutionPlan());
+
+        StreamGraph graph = env.getStreamGraph();
+
+        StreamGraphHasherV2 hasher = new StreamGraphHasherV2();
+
+        hasher.traverseStreamGraphAndGenerateHashes(graph).entrySet()
+                .stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(ent -> System.err.println(ent.getKey() + " => " + StringUtils.byteToHexString(ent.getValue())));
+
+        // for (Tuple2<Integer, StreamOperator<?>> op : graph.getOperators()) {
+        //     int nodeId = op.f0;
+        //     StreamNode node = graph.getStreamNode(nodeId);
+        //     System.err.println(nodeId + " => " + node.getTransformationUID());
+        // }
+
+        // Something needs to be assigning all of these UIDs...
+
+        // env.setRestartStrategy(RestartStrategies.fixedDelayRestart(100, Time.seconds(1)));
+        // env.enableCheckpointing(100L);
+        // env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
+        // env.execute("Network exec.");
     }
 }
